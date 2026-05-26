@@ -1,0 +1,8 @@
+name: "astrbot_plugin_oral_practice"
+display_name: "口语练习助手"
+version: "v0.1.0"
+author: "OralPracticeBot"
+repo: ""
+desc: "英语口语练习插件 - 支持自由对话、朗读练习、场景练习、单词操练，集成 Azure 发音评估"
+short_desc: "英语口语练习插件"
+plugin_type: "function"
