@@ -23,6 +23,7 @@ from .core.stt_service import STTService
 from .core.tts_service import TTSService
 from .core.astrbot_services import AstrBotSTTService, AstrBotTTSService
 from .core.azure_stt_service import AzureSTTService, UnavailableSTTService
+from .core.azure_tts_service import AzureTTSService
 from .core.pronunciation import PronunciationAssessor
 from .core.conversation import ConversationEngine
 from .core.feedback import FeedbackGenerator
@@ -108,10 +109,26 @@ class OralPracticePlugin(Star):
                 model=self.config.get("mimo_stt_model", "mimo-v2-omni"),
             )
 
-        # --- TTS: AstrBot provider by default, MiMo direct API as fallback ---
+        # --- TTS: Azure by default, AstrBot/MiMo as optional fallback ---
+        tts_backend = self.config.get("tts_backend", "azure")
         tts_provider_id = self.config.get("tts_provider_id", "")
-        use_astrbot_tts = self.config.get("use_astrbot_tts", True)
-        if use_astrbot_tts:
+        use_astrbot_tts = self.config.get("use_astrbot_tts", False)
+        if tts_backend == "azure":
+            try:
+                self.tts = AzureTTSService(
+                    subscription_key=azure_key,
+                    region=azure_region,
+                    voice_name=self.config.get("azure_tts_voice", "en-US-JennyNeural"),
+                    temp_dir=self._temp_dir,
+                )
+                logger.info("✅ Azure TTS 已配置")
+            except ImportError as e:
+                logger.warning(f"⚠️ Azure SDK 未安装，TTS 不可用: {e}")
+                self.tts = None
+            except Exception as e:
+                logger.warning(f"⚠️ Azure TTS 初始化失败，TTS 不可用: {e}")
+                self.tts = None
+        elif tts_backend == "astrbot" or use_astrbot_tts:
             self.tts = AstrBotTTSService(
                 context=self.context,
                 provider_id=tts_provider_id,
@@ -587,7 +604,11 @@ class OralPracticePlugin(Star):
                 audio_path = os.path.join(self._temp_dir, audio_filename)
                 with open(audio_path, "wb") as f:
                     f.write(audio)
-                chain.append(Comp.Record(file=audio_path, url=audio_path))
+                if hasattr(Comp.Record, "fromFileSystem"):
+                    chain.append(Comp.Record.fromFileSystem(audio_path))
+                else:
+                    chain.append(Comp.Record(file=audio_path))
+                logger.info("[OralPractice] 添加 TTS 语音回复: %s", audio_path)
             except Exception as e:
                 logger.warning(f"保存响应音频失败: {e}")
 

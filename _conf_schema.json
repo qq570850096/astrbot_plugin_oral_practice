@@ -25,11 +25,23 @@
     "description": "留空则使用 AstrBot 默认 STT 提供商",
     "default": ""
   },
+  "tts_backend": {
+    "type": "string",
+    "title": "TTS 语音合成后端",
+    "description": "azure=使用 Azure Text-to-Speech；astrbot=使用 AstrBot TTS；mimo=使用 MiMo 直连",
+    "default": "azure"
+  },
+  "azure_tts_voice": {
+    "type": "string",
+    "title": "Azure TTS Voice",
+    "description": "Azure 神经语音名称，例如 en-US-JennyNeural, en-US-GuyNeural",
+    "default": "en-US-JennyNeural"
+  },
   "use_astrbot_tts": {
     "type": "bool",
-    "title": "使用 AstrBot 语音合成提供商",
-    "description": "开启后复用 AstrBot WebUI 中已配置的 TTS；关闭后使用下方 MiMo 直连配置",
-    "default": true
+    "title": "兼容旧配置：使用 AstrBot 语音合成提供商",
+    "description": "建议改用 tts_backend=azure。此项仅用于兼容旧版本配置",
+    "default": false
   },
   "tts_provider_id": {
     "type": "string",
@@ -41,7 +53,7 @@
   "azure_speech_key": {
     "type": "string",
     "title": "Azure Speech API Key",
-    "description": "Azure 语音服务的 API 密钥，用于发音评估和 Azure STT",
+    "description": "Azure 语音服务的 API 密钥，用于发音评估、Azure STT 和 Azure TTS",
     "default": "",
     "obvious_hint": true
   },

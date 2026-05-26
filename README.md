@@ -1,12 +1,12 @@
 # 🎙️ AstrBot 口语练习插件
 
-英语口语练习插件，集成 Azure 发音评估与 Azure Speech-to-Text，并复用 AstrBot 已配置的 LLM/TTS 提供商，提供专业级口语训练体验。
+英语口语练习插件，集成 Azure 发音评估、Azure Speech-to-Text 和 Azure Text-to-Speech，并复用 AstrBot 已配置的 LLM 提供商，提供专业级口语训练体验。
 
 ## ✨ 功能特点
 
 | 模式 | 说明 | 核心技术 |
 |------|------|---------|
-| 🗣️ 自由对话 | 与 AI 伙伴 Alex 自然英语对话 | Azure STT + LLM + TTS |
+| 🗣️ 自由对话 | 与 AI 伙伴 Alex 自然英语对话 | Azure STT + LLM + Azure TTS |
 | 📖 朗读练习 | 朗读句子获得发音评分 | Azure 发音评估 + LLM 反馈 |
 | 🎭 场景练习 | 5 个真实场景角色扮演 | Azure STT + Azure 评估 + LLM |
 | 🔤 单词操练 | 60 个分级单词逐词练习 | Azure 评估 + IPA 音标 |
@@ -22,7 +22,7 @@
 
 1. **AstrBot** 已安装并运行
 2. **Azure Speech Services** API Key（发音评估 + STT）
-3. AstrBot WebUI 中已配置好的 LLM/TTS 提供商
+3. AstrBot WebUI 中已配置好的 LLM 提供商
 4. 可选：**小米 MiMo** API Key（仅作为 STT/TTS 直连 fallback）
 
 ## 🔧 安装
@@ -60,9 +60,8 @@ pip install -r astrbot_plugin_oral_practice/requirements.txt
 在 AstrBot WebUI 中先配置好：
 
 - 大语言模型提供商：用于自由对话、场景回复和反馈生成
-- 语音合成（TTS）提供商：用于生成示范和角色语音
 
-插件内 STT 默认使用 Azure Speech-to-Text，不依赖 AstrBot 全局 STT。
+插件内 STT/TTS 默认使用 Azure Speech，不依赖 AstrBot 全局 STT/TTS。
 
 ### 3. 小米 MiMo API Key（可选 fallback）
 
@@ -82,7 +81,9 @@ pip install -r astrbot_plugin_oral_practice/requirements.txt
 | `llm_provider_id` | AstrBot 大语言模型提供商 | 留空使用默认 |
 | `stt_backend` | STT 后端 | `azure` |
 | `stt_provider_id` | AstrBot 语音识别提供商 | 仅 `stt_backend=astrbot` 时使用 |
-| `tts_provider_id` | AstrBot 语音合成提供商 | 留空使用默认 |
+| `tts_backend` | TTS 后端 | `azure` |
+| `azure_tts_voice` | Azure TTS 声音 | `en-US-JennyNeural` |
+| `tts_provider_id` | AstrBot 语音合成提供商 | 仅 `tts_backend=astrbot` 时使用 |
 | `azure_speech_key` | Azure Speech API Key | `xxxxxxxxxxxxxxxx` |
 | `azure_speech_region` | Azure 区域 | `eastus` |
 | `mimo_api_key` | MiMo 直连 fallback API Key | 可选 |
@@ -132,6 +133,7 @@ astrbot_plugin_oral_practice/
 ├── core/                    # 核心服务层
 │   ├── astrbot_services.py  # AstrBot STT/TTS 提供商适配
 │   ├── azure_stt_service.py # Azure Speech-to-Text
+│   ├── azure_tts_service.py # Azure Text-to-Speech
 │   ├── stt_service.py       # MiMo-V2-Omni 直连 fallback
 │   ├── tts_service.py       # MiMo-V2-TTS 直连 fallback
 │   ├── pronunciation.py     # Azure 发音评估
