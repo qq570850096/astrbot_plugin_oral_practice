@@ -32,7 +32,7 @@ class AzureTTSService:
         self,
         subscription_key: str,
         region: str,
-        voice_name: str = "en-US-JennyNeural",
+        voice_name: str = "en-US-JennyMultilingualNeural",
         temp_dir: Optional[str] = None,
     ):
         if not _AZURE_SDK_AVAILABLE:
@@ -47,7 +47,7 @@ class AzureTTSService:
 
         self.subscription_key = subscription_key.strip()
         self.region = region.strip()
-        self.voice_name = (voice_name or "en-US-JennyNeural").strip()
+        self.voice_name = (voice_name or "en-US-JennyMultilingualNeural").strip()
         self.temp_dir = Path(temp_dir or ".")
         self.temp_dir.mkdir(parents=True, exist_ok=True)
 

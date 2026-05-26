@@ -118,7 +118,10 @@ class OralPracticePlugin(Star):
                 self.tts = AzureTTSService(
                     subscription_key=azure_key,
                     region=azure_region,
-                    voice_name=self.config.get("azure_tts_voice", "en-US-JennyNeural"),
+                    voice_name=self.config.get(
+                        "azure_tts_voice",
+                        "en-US-JennyMultilingualNeural",
+                    ),
                     temp_dir=self._temp_dir,
                 )
                 logger.info("✅ Azure TTS 已配置")

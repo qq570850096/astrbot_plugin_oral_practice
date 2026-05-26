@@ -56,8 +56,8 @@ class AssessmentResult:
 
     @property
     def problem_words(self) -> List[WordDetail]:
-        """Words with accuracy below 60 / 准确度低于60的单词"""
-        return [w for w in self.words if w.accuracy_score < 60 and w.error_type != 'None']
+        """Words worth coaching, including mild but useful pronunciation issues."""
+        return [w for w in self.words if w.accuracy_score < 85 or w.error_type != 'None']
 
     @property
     def good_words(self) -> List[WordDetail]:

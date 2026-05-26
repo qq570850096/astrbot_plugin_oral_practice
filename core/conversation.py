@@ -121,21 +121,25 @@ class ConversationEngine:
         params = level_params.get(level, level_params["B1"])
 
         prompt = (
-            f"Generate {count} natural English sentence(s) for oral reading practice.\n"
-            f"CEFR Level: {level}\n"
-            f"Topic: {topic}\n"
-            f"Length: {params['min_words']}-{params['max_words']} words each.\n"
-            "Include some pronunciation challenges (th/θ, r/l, word stress, linking).\n\n"
-            "Return ONLY the sentence(s), one per line. No numbering, no quotes, "
-            "no explanation."
+            "Generate English read-aloud practice sentences for a Chinese learner.\n"
+            f"Count: {count}\n"
+            f"CEFR level: {level}\n"
+            f"Scene/topic: {topic}\n"
+            f"Length: {params['min_words']}-{params['max_words']} words each.\n\n"
+            "Each sentence must sound like something a real person might say in daily life. "
+            "Avoid generic textbook lines. Include 1-2 focused pronunciation challenges, "
+            "such as /θ/ vs /s/, /ð/, /r/ vs /l/, /v/ vs /w/, final consonants, plural endings, "
+            "word stress, sentence stress, linking, or weak forms.\n\n"
+            "Return ONLY the sentence text, one sentence per line. No numbering, no quotes, "
+            "no explanation, no IPA."
         )
 
         messages = [
             {
                 "role": "system",
                 "content": (
-                    "You are a helpful English language assistant. "
-                    "Generate natural, spoken-style English sentences."
+                    "You are a strict English pronunciation curriculum designer. "
+                    "Create natural, useful read-aloud sentences with clear pronunciation targets."
                 ),
             },
             {"role": "user", "content": prompt},

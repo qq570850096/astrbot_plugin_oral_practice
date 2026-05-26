@@ -34,8 +34,8 @@
   "azure_tts_voice": {
     "type": "string",
     "title": "Azure TTS Voice",
-    "description": "Azure 神经语音名称，例如 en-US-JennyNeural, en-US-GuyNeural",
-    "default": "en-US-JennyNeural"
+    "description": "Azure 神经语音名称。中英混合反馈建议使用多语言声音，例如 en-US-JennyMultilingualNeural",
+    "default": "en-US-JennyMultilingualNeural"
   },
   "use_astrbot_tts": {
     "type": "bool",

@@ -16,20 +16,27 @@ from .pronunciation import AssessmentResult
 
 # ── Feedback prompt for LLM-based feedback generation ──
 FEEDBACK_SYSTEM_PROMPT = """\
-You are an expert English pronunciation coach. You help Chinese students \
-improve their spoken English. Given pronunciation assessment data, generate \
-warm, encouraging, and actionable feedback in Chinese.
+你是一位严格、专业、真心希望学生提高口语的英语发音教练。学生是中文母语者。
 
-Guidelines:
-- Start with genuine praise for what was done well
-- Point out specific pronunciation issues with helpful tips
-- Use IPA notation when mentioning sounds
-- Keep the tone encouraging and supportive — never harsh
-- Provide 2-3 concrete, actionable practice tips
-- If the student scored above 90, celebrate their achievement
-- If below 50, be extra encouraging and focus on small wins
-- Keep your response under 300 characters
-- Use emoji sparingly but naturally
+你的反馈必须中英混合，像真人老师一样具体、直接、有训练价值。不要只说
+"Good work" 或 "很棒"。即使分数高，也要指出至少一个可以继续打磨的点。
+
+评分态度：
+- overall < 85：不要说“很棒”，只能说“基础不错/能听懂，但仍需打磨”
+- accuracy 高且 fluency 高时，也要检查 word stress、sentence stress、linking、ending sounds
+- prosody 为 0 或缺失时，不要批评 Azure 没给分；改为提醒学生练重音、停顿和语调
+
+反馈结构：
+1. 先用一句话评价整体表现，中文为主，夹一个自然英文短句。
+2. 指出 2 个最值得练的问题：具体到单词、音素 IPA、重音或连读。
+3. 每个问题都给一个“怎么练”的动作，例如舌位、嘴型、重读位置、慢读次数。
+4. 最后给 1 个 30 秒练习任务。
+
+格式要求：
+- 使用中文解释，关键术语和例句可用英文。
+- 必须包含 IPA，例如 /θ/, /lɪtl/, /ˈmɔːrnɪŋz/。
+- 180-350 中文字，最多 8 行。
+- 语气严格但不打击人：像负责的老师，不像客服。
 """
 
 
@@ -502,14 +509,31 @@ class FeedbackGenerator:
                         if p.accuracy_score < 60
                     ],
                 }
-                for w in assessment.problem_words
+                for w in assessment.problem_words[:8]
+            ],
+            "lowest_words": [
+                {
+                    "word": w.word,
+                    "accuracy": w.accuracy_score,
+                    "error_type": w.error_type,
+                    "phonemes": [
+                        {"phoneme": p.phoneme, "accuracy": p.accuracy_score}
+                        for p in w.phonemes[:5]
+                    ],
+                }
+                for w in sorted(
+                    assessment.words,
+                    key=lambda item: item.accuracy_score,
+                )[:5]
             ],
             "good_words": [w.word for w in assessment.good_words[:10]],
             "total_words": len(assessment.words),
         }
 
         user_prompt = (
-            "以下是学生的发音评估数据，请生成温暖、鼓励性的反馈：\n\n"
+            "以下是学生的 Azure Pronunciation Assessment 数据。"
+            "请按系统要求生成严格、具体、中英混合的发音反馈。"
+            "不要泛泛表扬，要指出可以马上练的发音点。\n\n"
             f"```json\n{json.dumps(assessment_data, ensure_ascii=False, indent=2)}\n```"
         )
 

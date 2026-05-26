@@ -82,7 +82,7 @@ pip install -r astrbot_plugin_oral_practice/requirements.txt
 | `stt_backend` | STT 后端 | `azure` |
 | `stt_provider_id` | AstrBot 语音识别提供商 | 仅 `stt_backend=astrbot` 时使用 |
 | `tts_backend` | TTS 后端 | `azure` |
-| `azure_tts_voice` | Azure TTS 声音 | `en-US-JennyNeural` |
+| `azure_tts_voice` | Azure TTS 声音 | `en-US-JennyMultilingualNeural` |
 | `tts_provider_id` | AstrBot 语音合成提供商 | 仅 `tts_backend=astrbot` 时使用 |
 | `azure_speech_key` | Azure Speech API Key | `xxxxxxxxxxxxxxxx` |
 | `azure_speech_region` | Azure 区域 | `eastus` |

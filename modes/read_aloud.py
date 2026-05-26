@@ -203,6 +203,7 @@ class ReadAloudMode(BaseMode):
                 assessment.overall_score,
                 assessment.accuracy_score,
                 assessment.fluency_score,
+                assessment.problem_words,
             )
         )
         return response_text, audio
@@ -370,19 +371,31 @@ class ReadAloudMode(BaseMode):
         overall_score: float,
         accuracy_score: float,
         fluency_score: float,
+        problem_words,
     ) -> str:
+        focus = ""
+        if problem_words:
+            word = problem_words[0].word
+            phonemes = [
+                f"/{p.phoneme}/"
+                for p in getattr(problem_words[0], "phonemes", [])
+                if p.accuracy_score < 75
+            ]
+            sound = phonemes[0] if phonemes else "the key sound"
+            focus = f"重点练 {word}, especially {sound}. "
+
         if overall_score >= 85:
-            opening = "Great job. Your pronunciation was clear and fluent."
-            next_step = "You can try the next sentence, or repeat this one for extra practice."
+            opening = "整体不错，但还不要满足。Your fluency is good."
+            next_step = "接下来慢读一遍，注意 stress and ending sounds."
         elif overall_score >= 70:
-            opening = "Good work. Your pronunciation is understandable."
-            next_step = "Try reading it once more, a little slower and more clearly."
+            opening = "能听懂，但还不够精确。Your pronunciation needs sharper control."
+            next_step = "请放慢速度，先把每个重音和尾音读清楚。"
         else:
-            opening = "Nice effort. Let's practice this sentence again."
-            next_step = "Focus on each word, and keep a steady rhythm."
+            opening = "这次需要重练。Let's rebuild the sentence slowly."
+            next_step = "先逐词读，再连成完整句子。"
 
         return (
-            f"{opening} Your overall score is {overall_score:.0f}. "
-            f"Accuracy is {accuracy_score:.0f}, and fluency is {fluency_score:.0f}. "
+            f"{opening} 总分 {overall_score:.0f}, accuracy {accuracy_score:.0f}, "
+            f"fluency {fluency_score:.0f}. {focus}"
             f"{next_step}"
         )
