@@ -5,6 +5,7 @@ Bot 给出句子，用户朗读后获得 Azure 发音评估反馈
 
 from __future__ import annotations
 
+import re
 import random
 from typing import Optional
 
@@ -198,14 +199,7 @@ class ReadAloudMode(BaseMode):
             )
 
         response_text = "\n".join(text_parts)
-        audio = await self._try_tts(
-            self._build_spoken_feedback(
-                assessment.overall_score,
-                assessment.accuracy_score,
-                assessment.fluency_score,
-                assessment.problem_words,
-            )
-        )
+        audio = await self._try_tts(self._build_spoken_feedback(feedback_text))
         return response_text, audio
 
     async def handle_text(self, text: str) -> tuple[str, Optional[bytes]]:
@@ -367,35 +361,25 @@ class ReadAloudMode(BaseMode):
             return None
 
     @staticmethod
-    def _build_spoken_feedback(
-        overall_score: float,
-        accuracy_score: float,
-        fluency_score: float,
-        problem_words,
-    ) -> str:
-        focus = ""
-        if problem_words:
-            word = problem_words[0].word
-            phonemes = [
-                f"/{p.phoneme}/"
-                for p in getattr(problem_words[0], "phonemes", [])
-                if p.accuracy_score < 75
-            ]
-            sound = phonemes[0] if phonemes else "the key sound"
-            focus = f"重点练 {word}, especially {sound}. "
+    def _build_spoken_feedback(feedback_text: str) -> str:
+        """Build a concise spoken version from the LLM coaching feedback."""
+        text = feedback_text or ""
+        text = re.sub(r"[*_`#>\[\]]", "", text)
+        text = re.sub(r"[📊🎯📌💡🌟✨💪👍👏⭐✅❌⚠️🔥]", "", text)
+        text = re.sub(r"█+░*", "", text)
+        text = re.sub(r"\s+", " ", text).strip()
 
-        if overall_score >= 85:
-            opening = "整体不错，但还不要满足。Your fluency is good."
-            next_step = "接下来慢读一遍，注意 stress and ending sounds."
-        elif overall_score >= 70:
-            opening = "能听懂，但还不够精确。Your pronunciation needs sharper control."
-            next_step = "请放慢速度，先把每个重音和尾音读清楚。"
-        else:
-            opening = "这次需要重练。Let's rebuild the sentence slowly."
-            next_step = "先逐词读，再连成完整句子。"
+        sentences = re.split(r"(?<=[。！？.!?])\s+", text)
+        selected: list[str] = []
+        for sentence in sentences:
+            sentence = sentence.strip(" -•")
+            if not sentence:
+                continue
+            selected.append(sentence)
+            if len(" ".join(selected)) >= 180 or len(selected) >= 3:
+                break
 
-        return (
-            f"{opening} 总分 {overall_score:.0f}, accuracy {accuracy_score:.0f}, "
-            f"fluency {fluency_score:.0f}. {focus}"
-            f"{next_step}"
-        )
+        spoken = " ".join(selected).strip()
+        if not spoken:
+            return "这次反馈已经生成，请重点看文字里的发音问题和三十秒练习任务。"
+        return spoken[:260]
