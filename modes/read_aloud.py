@@ -125,20 +125,25 @@ class ReadAloudMode(BaseMode):
 
         logger.info(f"{self._log_prefix()} 评估朗读: \"{reference[:50]}...\"")
 
-        # 发音评估
-        if self.pronunciation_assessor:
-            try:
-                assessment = await self.pronunciation_assessor.assess(
-                    audio_path=audio_path,
-                    reference_text=reference,
-                    language="en-US",
-                )
-            except Exception as e:
-                logger.error(f"{self._log_prefix()} Azure 评估失败: {e}")
-                # 降级：仅做 STT 转写
-                return await self._fallback_stt_only(audio_path, reference)
-        else:
-            return await self._fallback_stt_only(audio_path, reference)
+        if not self.pronunciation_assessor:
+            return (
+                "❌ Azure 发音评估未配置，朗读练习无法继续。\n\n"
+                "请在插件配置中填写 azure_speech_key 和 azure_speech_region。"
+            ), None
+
+        try:
+            assessment = await self.pronunciation_assessor.assess(
+                audio_path=audio_path,
+                reference_text=reference,
+                language="en-US",
+            )
+        except Exception as e:
+            logger.error(f"{self._log_prefix()} Azure 评估失败: {e}", exc_info=True)
+            return (
+                "❌ Azure 发音评估失败，未进行 STT 降级。\n\n"
+                f"错误: {str(e)[:300]}\n\n"
+                "请检查 Azure Speech Key/Region、音频格式和网络连接。"
+            ), None
 
         # 生成反馈报告
         if self.feedback_generator:
@@ -299,27 +304,6 @@ class ReadAloudMode(BaseMode):
         sentence = random.choice(available)
         practiced.append(sentence)
         return sentence
-
-    async def _fallback_stt_only(
-        self, audio_path: str, reference: str
-    ) -> tuple[str, Optional[bytes]]:
-        """降级处理：仅做 STT 转写（无评估）"""
-        try:
-            result = await self.stt_service.transcribe(audio_path)
-            user_text = result.text
-        except Exception as e:
-            return f"😅 语音识别失败: {str(e)[:100]}", None
-
-        response = (
-            "📝 你的朗读：\n"
-            f"\"{user_text}\"\n\n"
-            "📖 参考文本：\n"
-            f"\"{reference}\"\n\n"
-            "⚠️ 发音评估服务暂不可用，仅显示识别结果。\n"
-            "请检查 Azure Speech API Key 配置。\n\n"
-            "发送语音重试，或输入「下一个」继续"
-        )
-        return response, None
 
     def _simple_feedback(self, assessment) -> str:
         """简单模板反馈（当 FeedbackGenerator 不可用时）"""

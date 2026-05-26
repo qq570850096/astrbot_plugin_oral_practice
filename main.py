@@ -11,6 +11,7 @@ from __future__ import annotations
 import os
 import inspect
 import time
+import wave
 from typing import Optional
 
 from astrbot.api.event import filter, AstrMessageEvent
@@ -336,8 +337,17 @@ class OralPracticePlugin(Star):
                 except Exception:
                     pass
             else:
-                # 文本消息
-                text, audio = await mode.handle_text(event.message_str)
+                if (
+                    session.state == SessionState.READ_ALOUD
+                    and event.message_str.strip()
+                    and not self._is_read_aloud_text_command(event.message_str)
+                ):
+                    logger.warning(
+                        "[OralPractice] 朗读模式收到文本但未拿到音频，可能已被 AstrBot 全局 STT 预处理消费。"
+                    )
+                    text, audio = self._missing_audio_for_assessment_message(), None
+                else:
+                    text, audio = await mode.handle_text(event.message_str)
         except Exception as e:
             logger.error(f"处理消息失败: {e}", exc_info=True)
             text = f"😅 处理出了点问题: {str(e)[:100]}\n请再试一次~"
@@ -450,9 +460,35 @@ class OralPracticePlugin(Star):
                     "[OralPractice] 语音组件未能转换为文件路径: %s",
                     self._component_debug_info(comp),
                 )
+
+            temp_audio_path = self._extract_preprocessed_audio(event)
+            if temp_audio_path:
+                logger.info(
+                    "[OralPractice] 从 AstrBot 预处理临时文件恢复语音: %s",
+                    temp_audio_path,
+                )
+                return temp_audio_path
         except Exception as e:
             logger.debug(f"提取音频失败: {e}", exc_info=True)
         return None
+
+    def _extract_preprocessed_audio(self, event: AstrMessageEvent) -> Optional[str]:
+        """Recover wav files created before AstrBot global STT replaces Record."""
+        candidates = getattr(event, "_temporary_local_files", []) or []
+        for path in reversed(candidates):
+            if not path or not os.path.exists(path):
+                continue
+            if self._is_wav_file(path):
+                return str(path)
+        return None
+
+    @staticmethod
+    def _is_wav_file(path: str) -> bool:
+        try:
+            with wave.open(str(path), "rb"):
+                return True
+        except Exception:
+            return False
 
     @staticmethod
     def _is_record_component(comp) -> bool:
@@ -497,6 +533,22 @@ class OralPracticePlugin(Star):
             "convert_to_file_path": hasattr(comp, "convert_to_file_path"),
         }
         return ", ".join(f"{key}={value}" for key, value in fields.items())
+
+    @staticmethod
+    def _missing_audio_for_assessment_message() -> str:
+        return (
+            "❌ 没有拿到原始语音，无法进行 Azure 发音评估。\n\n"
+            "AstrBot 全局 STT 可能已在插件执行前把语音转换成文本。\n"
+            "朗读模式需要原始音频，请关闭 AstrBot 全局语音转文本，"
+            "让本插件先接收语音并调用 Azure Pronunciation Assessment。"
+        )
+
+    @staticmethod
+    def _is_read_aloud_text_command(message: str) -> bool:
+        text = (message or "").strip().lower()
+        if text in {"下一个", "next", "skip", "跳过", "再来", "again", "retry", "重试"}:
+            return True
+        return text.startswith(("换难度", "level", "等级"))
 
     def _bind_event_context(self, event: AstrMessageEvent) -> None:
         umo = event.unified_msg_origin
