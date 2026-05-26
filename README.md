@@ -1,14 +1,14 @@
 # 🎙️ AstrBot 口语练习插件
 
-英语口语练习插件，集成 Azure 发音评估 + MiMo STT/TTS + GPT 5.5，提供专业级口语训练体验。
+英语口语练习插件，集成 Azure 发音评估，并复用 AstrBot 已配置的 LLM/STT/TTS 提供商，提供专业级口语训练体验。
 
 ## ✨ 功能特点
 
 | 模式 | 说明 | 核心技术 |
 |------|------|---------|
-| 🗣️ 自由对话 | 与 AI 伙伴 Alex 自然英语对话 | MiMo STT + GPT 5.5 + MiMo TTS |
-| 📖 朗读练习 | 朗读句子获得发音评分 | Azure 发音评估 + GPT 反馈 |
-| 🎭 场景练习 | 5 个真实场景角色扮演 | Azure 评估 + GPT 角色扮演 |
+| 🗣️ 自由对话 | 与 AI 伙伴 Alex 自然英语对话 | AstrBot STT + LLM + TTS |
+| 📖 朗读练习 | 朗读句子获得发音评分 | Azure 发音评估 + LLM 反馈 |
+| 🎭 场景练习 | 5 个真实场景角色扮演 | Azure 评估 + LLM 角色扮演 |
 | 🔤 单词操练 | 60 个分级单词逐词练习 | Azure 评估 + IPA 音标 |
 
 ### 其他特性
@@ -22,8 +22,8 @@
 
 1. **AstrBot** 已安装并运行
 2. **Azure Speech Services** API Key（发音评估）
-3. **小米 MiMo** API Key（STT + TTS）
-4. **GPT 5.5** API Key（对话引擎）
+3. AstrBot WebUI 中已配置好的 LLM/STT/TTS 提供商
+4. 可选：**小米 MiMo** API Key（仅作为 STT/TTS 直连 fallback）
 
 ## 🔧 安装
 
@@ -55,17 +55,23 @@ pip install -r astrbot_plugin_oral_practice/requirements.txt
 
 > 💡 **费用参考**：约 $1.32/小时（短音频约 $0.66/小时）
 
-### 2. 小米 MiMo API Key
+### 2. AstrBot 模型提供商
+
+在 AstrBot WebUI 中先配置好：
+
+- 大语言模型提供商：用于自由对话、场景回复和反馈生成
+- 语音识别（STT）提供商：用于识别用户语音
+- 语音合成（TTS）提供商：用于生成示范和角色语音
+
+插件配置页中选择对应提供商即可。留空时使用 AstrBot 默认提供商。
+
+### 3. 小米 MiMo API Key（可选 fallback）
 
 1. 访问小米 MiMo 开放平台
 2. 创建应用获取 API Key
 3. 需要的模型：
    - `mimo-v2-omni` — 语音识别（STT）
    - `mimo-v2-tts` — 语音合成（TTS）
-
-### 3. GPT 5.5 API Key
-
-使用标准 OpenAI API 格式，配置 API Key 和 Base URL。
 
 ### 4. 在 AstrBot 中配置
 
@@ -74,13 +80,12 @@ pip install -r astrbot_plugin_oral_practice/requirements.txt
 
 | 配置项 | 说明 | 示例 |
 |--------|------|------|
+| `llm_provider_id` | AstrBot 大语言模型提供商 | 留空使用默认 |
+| `stt_provider_id` | AstrBot 语音识别提供商 | 留空使用默认 |
+| `tts_provider_id` | AstrBot 语音合成提供商 | 留空使用默认 |
 | `azure_speech_key` | Azure Speech API Key | `xxxxxxxxxxxxxxxx` |
 | `azure_speech_region` | Azure 区域 | `eastasia` |
-| `mimo_api_key` | MiMo API Key | `xxxxxxxxxxxxxxxx` |
-| `mimo_api_base` | MiMo API 地址 | `https://api.xiaomimimo.com/v1` |
-| `gpt_api_key` | GPT API Key | `sk-xxxxxxxxxxxxxxxx` |
-| `gpt_api_base` | GPT API 地址 | `https://api.openai.com/v1` |
-| `gpt_model` | GPT 模型名 | `gpt-5.5` |
+| `mimo_api_key` | MiMo 直连 fallback API Key | 可选 |
 
 ## 📖 使用方法
 
@@ -125,10 +130,11 @@ astrbot_plugin_oral_practice/
 ├── requirements.txt         # Python 依赖
 │
 ├── core/                    # 核心服务层
-│   ├── stt_service.py       # MiMo-V2-Omni 语音识别
-│   ├── tts_service.py       # MiMo-V2-TTS 语音合成
+│   ├── astrbot_services.py  # AstrBot STT/TTS 提供商适配
+│   ├── stt_service.py       # MiMo-V2-Omni 直连 fallback
+│   ├── tts_service.py       # MiMo-V2-TTS 直连 fallback
 │   ├── pronunciation.py     # Azure 发音评估
-│   ├── conversation.py      # GPT 5.5 对话引擎
+│   ├── conversation.py      # AstrBot LLM 对话引擎
 │   ├── feedback.py          # 反馈报告生成
 │   ├── progress.py          # SQLite 进度追踪
 │   ├── session.py           # 会话状态机
@@ -152,13 +158,13 @@ astrbot_plugin_oral_practice/
                                       │
                  ┌────────────────────┼────────────────────┐
                  │                    │                    │
-            MiMo STT            Azure 评估           GPT 5.5
+          AstrBot STT          Azure 评估          AstrBot LLM
          (语音→文字)          (发音评分)           (对话/反馈)
-                 │                    │                    │
-                 └────────────────────┼────────────────────┘
-                                      │
-                                 MiMo TTS
-                               (文字→语音)
+                  │                    │                    │
+                  └────────────────────┼────────────────────┘
+                                       │
+                                  AstrBot TTS
+                                (文字→语音)
                                       │
                               回复用户 (文字+语音)
 ```

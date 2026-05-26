@@ -3,7 +3,7 @@ AstrBot 口语练习插件 — 主入口
 English Oral Practice Plugin for AstrBot
 
 支持：自由对话、朗读练习、场景练习、单词操练
-集成：Azure 发音评估 + MiMo STT/TTS + GPT 5.5
+集成：Azure 发音评估 + AstrBot LLM/STT/TTS 提供商
 """
 
 from __future__ import annotations
@@ -20,6 +20,7 @@ import astrbot.api.message_components as Comp
 
 from .core.stt_service import STTService
 from .core.tts_service import TTSService
+from .core.astrbot_services import AstrBotSTTService, AstrBotTTSService
 from .core.pronunciation import PronunciationAssessor
 from .core.conversation import ConversationEngine
 from .core.feedback import FeedbackGenerator
@@ -66,24 +67,41 @@ class OralPracticePlugin(Star):
     def _init_services(self):
         """根据配置初始化所有服务实例"""
 
-        # --- STT: MiMo-V2-Omni ---
+        # --- STT: AstrBot provider by default, MiMo direct API as fallback ---
+        stt_provider_id = self.config.get("stt_provider_id", "")
+        use_astrbot_stt = self.config.get("use_astrbot_stt", True)
         mimo_key = self.config.get("mimo_api_key", "")
         mimo_base = self.config.get("mimo_api_base", "https://api.xiaomimimo.com/v1")
 
-        self.stt = STTService(
-            api_key=mimo_key,
-            api_base=mimo_base,
-            model=self.config.get("mimo_stt_model", "mimo-v2-omni"),
-        )
+        if use_astrbot_stt:
+            self.stt = AstrBotSTTService(
+                context=self.context,
+                provider_id=stt_provider_id,
+            )
+        else:
+            self.stt = STTService(
+                api_key=mimo_key,
+                api_base=mimo_base,
+                model=self.config.get("mimo_stt_model", "mimo-v2-omni"),
+            )
 
-        # --- TTS: MiMo-V2-TTS ---
-        self.tts = TTSService(
-            api_key=mimo_key,
-            api_base=mimo_base,
-            model=self.config.get("mimo_tts_model", "mimo-v2-tts"),
-            default_emotion=self.config.get("tts_emotion", "温柔"),
-            temp_dir=self._temp_dir,
-        )
+        # --- TTS: AstrBot provider by default, MiMo direct API as fallback ---
+        tts_provider_id = self.config.get("tts_provider_id", "")
+        use_astrbot_tts = self.config.get("use_astrbot_tts", True)
+        if use_astrbot_tts:
+            self.tts = AstrBotTTSService(
+                context=self.context,
+                provider_id=tts_provider_id,
+                temp_dir=self._temp_dir,
+            )
+        else:
+            self.tts = TTSService(
+                api_key=mimo_key,
+                api_base=mimo_base,
+                model=self.config.get("mimo_tts_model", "mimo-v2-tts"),
+                default_emotion=self.config.get("tts_emotion", "温柔"),
+                temp_dir=self._temp_dir,
+            )
 
         # --- Pronunciation: Azure ---
         azure_key = self.config.get("azure_speech_key", "")
@@ -99,12 +117,10 @@ class OralPracticePlugin(Star):
             self.pronunciation = None
             logger.warning("⚠️ Azure Speech Key 未配置，发音评估功能不可用")
 
-        # --- Conversation: GPT 5.5 ---
+        # --- Conversation: AstrBot LLM provider ---
         self.conversation = ConversationEngine(
-            api_key=self.config.get("gpt_api_key", ""),
-            api_base=self.config.get("gpt_api_base", "https://api.openai.com/v1"),
-            model=self.config.get("gpt_model", "gpt-5.5"),
             context=self.context,
+            provider_id=self.config.get("llm_provider_id", ""),
         )
 
         # --- Feedback Generator ---
@@ -396,7 +412,7 @@ class OralPracticePlugin(Star):
             "  /oral report  — 📊 查看练习报告\n"
             "  /oral stop    — ⏹️ 结束当前练习\n\n"
             "💡 提示: 在练习中直接发送语音消息即可开始!\n"
-            "📌 首次使用请在 AstrBot WebUI 中配置 API Keys"
+            "📌 首次使用请在 AstrBot WebUI 中选择模型提供商"
         )
 
     async def terminate(self):

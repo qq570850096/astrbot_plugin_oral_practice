@@ -18,7 +18,7 @@ class FreeTalkMode(BaseMode):
     自由对话模式
 
     用户与 AI 口语伙伴 Alex 进行自然对话，
-    GPT 5.5 会在对话中穿插语言表达建议。
+    AstrBot LLM 提供商会在对话中穿插语言表达建议。
     不做发音评估（避免打断对话流畅性）。
 
     流程：语音 → STT → GPT 对话 → 文本级反馈 → TTS 回复

@@ -1,58 +1,30 @@
 """
-Conversation Engine — GPT 5.5 对话引擎
-管理对话上下文，通过 OpenAI 兼容 API 调用 GPT 5.5
+Conversation Engine backed by AstrBot's configured LLM providers.
+对话引擎：优先使用 AstrBot WebUI 中已配置的大语言模型提供商。
 """
 
 from __future__ import annotations
 
-import asyncio
-import json
-from typing import Optional
-
-import aiohttp
 from astrbot.api import logger
 
 
 class ConversationEngine:
     """
-    GPT 5.5 对话引擎
+    Thin wrapper around AstrBot's LLM provider API.
 
-    通过 OpenAI 兼容的 /chat/completions API 调用大语言模型，
-    管理对话上下文并生成回复。
+    The plugin keeps its own short conversation history, but delegates actual
+    generation to the chat provider selected in AstrBot WebUI.
     """
 
-    def __init__(
-        self,
-        api_key: str = "",
-        api_base: str = "https://api.openai.com/v1",
-        model: str = "gpt-5.5",
-        context=None,
-        timeout: int = 30,
-    ):
-        """
-        初始化对话引擎
-
-        Args:
-            api_key:  GPT API Key
-            api_base: API Base URL (须以 /v1 结尾)
-            model:    模型名称
-            context:  AstrBot Context（备用，用于内置 LLM 调用）
-            timeout:  请求超时秒数
-        """
-        self.api_key = api_key
-        self.api_base = api_base.rstrip("/")
-        self.model = model
+    def __init__(self, context=None, provider_id: str = "", umo: str = ""):
         self.context = context
-        self.timeout = timeout
+        self.provider_id = (provider_id or "").strip()
+        self.umo = umo
 
     @property
     def available(self) -> bool:
-        """服务是否可用"""
-        return bool(self.api_key)
-
-    # ------------------------------------------------------------------
-    # 核心 API 调用
-    # ------------------------------------------------------------------
+        """Whether AstrBot LLM access is available."""
+        return self.context is not None
 
     async def generate(
         self,
@@ -61,95 +33,47 @@ class ConversationEngine:
         max_tokens: int = 500,
     ) -> str:
         """
-        调用 GPT 5.5 生成回复
+        Generate a response using AstrBot's configured chat provider.
 
-        Args:
-            messages: 消息列表 [{"role": "system"/"user"/"assistant", "content": "..."}]
-            temperature: 创造性参数 (0.0-2.0)
-            max_tokens: 最大回复长度
-
-        Returns:
-            生成的文本回复
-
-        Raises:
-            RuntimeError: 网络或认证错误
-            ValueError: 响应格式异常
+        ``temperature`` and ``max_tokens`` are currently advisory. AstrBot
+        provider-level model settings remain the source of truth.
         """
-        if not self.api_key:
-            raise RuntimeError("[Conversation] GPT API Key 未配置")
+        if not self.context:
+            raise RuntimeError("[Conversation] AstrBot Context 不可用")
 
-        payload = {
-            "model": self.model,
-            "messages": messages,
-            "temperature": temperature,
-            "max_tokens": max_tokens,
-        }
-
-        url = f"{self.api_base}/chat/completions"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}",
-        }
+        provider_id = await self._resolve_provider_id()
+        prompt, system_prompt = self._messages_to_prompt(messages)
 
         try:
-            client_timeout = aiohttp.ClientTimeout(total=self.timeout)
-            async with aiohttp.ClientSession(timeout=client_timeout) as session:
-                logger.debug(
-                    f"[Conversation] POST {url} model={self.model} "
-                    f"messages={len(messages)} temp={temperature}"
-                )
+            kwargs = {
+                "chat_provider_id": provider_id,
+                "prompt": prompt,
+            }
+            if system_prompt:
+                kwargs["system_prompt"] = system_prompt
 
-                async with session.post(url, json=payload, headers=headers) as resp:
-                    if resp.status == 401:
-                        raise RuntimeError(
-                            "[Conversation] GPT API Key 无效或已过期，请检查配置"
-                        )
-                    elif resp.status == 429:
-                        raise RuntimeError(
-                            "[Conversation] GPT API 请求频率超限，请稍后重试"
-                        )
-                    elif resp.status >= 500:
-                        raise RuntimeError(
-                            f"[Conversation] GPT 服务器错误 (HTTP {resp.status})"
-                        )
-                    elif resp.status != 200:
-                        body = await resp.text()
-                        raise RuntimeError(
-                            f"[Conversation] GPT API 错误 (HTTP {resp.status}): "
-                            f"{body[:300]}"
-                        )
-                    data = await resp.json()
+            llm_resp = await self.context.llm_generate(**kwargs)
+        except TypeError:
+            # Older AstrBot builds may not accept system_prompt here.
+            full_prompt = prompt
+            if system_prompt:
+                full_prompt = f"{system_prompt}\n\n{prompt}"
+            llm_resp = await self.context.llm_generate(
+                chat_provider_id=provider_id,
+                prompt=full_prompt,
+            )
+        except Exception as exc:
+            raise RuntimeError(f"[Conversation] AstrBot LLM 调用失败: {exc}") from exc
 
-        except aiohttp.ClientError as exc:
-            raise RuntimeError(
-                f"[Conversation] 网络请求失败: {exc}"
-            ) from exc
-        except asyncio.TimeoutError as exc:
-            raise RuntimeError(
-                f"[Conversation] 请求超时 ({self.timeout}秒)"
-            ) from exc
-
-        # 解析响应
-        try:
-            content = data["choices"][0]["message"]["content"]
-        except (KeyError, IndexError, TypeError) as exc:
-            logger.error(f"[Conversation] 响应格式异常: {data}")
-            raise ValueError(
-                f"[Conversation] 响应解析失败: {exc}"
-            ) from exc
-
-        if not content or not content.strip():
-            raise ValueError("[Conversation] GPT 返回了空回复")
+        content = getattr(llm_resp, "completion_text", "") or str(llm_resp or "")
+        if not content.strip():
+            raise ValueError("[Conversation] AstrBot LLM 返回了空回复")
 
         logger.debug(
-            f"[Conversation] 回复 ({len(content)} chars): "
-            f"{content[:100]}{'...' if len(content) > 100 else ''}"
+            f"[Conversation] AstrBot provider={provider_id or 'default'} "
+            f"reply={content[:100]}{'...' if len(content) > 100 else ''}"
         )
         return content.strip()
-
-    # ------------------------------------------------------------------
-    # 便捷方法
-    # ------------------------------------------------------------------
 
     async def generate_response(
         self,
@@ -157,28 +81,9 @@ class ConversationEngine:
         conversation_history: list[dict],
         system_prompt: str,
     ) -> str:
-        """
-        生成对话回复
-
-        基于系统 prompt + 对话历史 + 用户输入，生成自然对话回复
-
-        Args:
-            user_text: 用户最新输入
-            conversation_history: 对话历史 [{"role": ..., "content": ...}]
-            system_prompt: 系统 prompt
-
-        Returns:
-            生成的对话回复
-        """
         messages = [{"role": "system", "content": system_prompt}]
-
-        # 添加对话历史（取最近 20 条，避免 token 溢出）
-        recent_history = conversation_history[-20:] if conversation_history else []
-        messages.extend(recent_history)
-
-        # 添加当前用户输入
+        messages.extend(conversation_history[-20:] if conversation_history else [])
         messages.append({"role": "user", "content": user_text})
-
         return await self.generate(messages, temperature=0.8, max_tokens=500)
 
     async def generate_feedback(
@@ -187,28 +92,15 @@ class ConversationEngine:
         reference_text: str,
         system_prompt: str,
     ) -> str:
-        """
-        根据发音评估结果生成人性化反馈
-
-        Args:
-            assessment_json: Azure 评估结果 JSON 字符串
-            reference_text: 朗读参考文本
-            system_prompt: 反馈系统 prompt
-
-        Returns:
-            人性化的反馈报告文本
-        """
         user_prompt = (
             f"## 参考文本\n{reference_text}\n\n"
             f"## 发音评估结果 (JSON)\n```json\n{assessment_json}\n```\n\n"
-            f"请根据以上评估数据生成反馈报告。"
+            "请根据以上评估数据生成反馈报告。"
         )
-
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ]
-
         return await self.generate(messages, temperature=0.6, max_tokens=800)
 
     async def generate_sentence(
@@ -217,18 +109,6 @@ class ConversationEngine:
         topic: str = "daily life",
         count: int = 1,
     ) -> str:
-        """
-        生成指定 CEFR 等级的练习句子
-
-        Args:
-            level: CEFR 等级 (A1/A2/B1/B2)
-            topic: 主题
-            count: 生成数量
-
-        Returns:
-            生成的练习句子（或 JSON 数组字符串）
-        """
-        # 难度参数
         level_params = {
             "A1": {"min_words": 4, "max_words": 8},
             "A2": {"min_words": 6, "max_words": 12},
@@ -242,27 +122,26 @@ class ConversationEngine:
             f"CEFR Level: {level}\n"
             f"Topic: {topic}\n"
             f"Length: {params['min_words']}-{params['max_words']} words each.\n"
-            f"Include some pronunciation challenges (th/θ, r/l, word stress, linking).\n\n"
-            f"Return ONLY the sentence(s), one per line. No numbering, no quotes, "
-            f"no explanation."
+            "Include some pronunciation challenges (th/θ, r/l, word stress, linking).\n\n"
+            "Return ONLY the sentence(s), one per line. No numbering, no quotes, "
+            "no explanation."
         )
 
         messages = [
             {
                 "role": "system",
-                "content": "You are a helpful English language assistant. "
-                "Generate natural, spoken-style English sentences.",
+                "content": (
+                    "You are a helpful English language assistant. "
+                    "Generate natural, spoken-style English sentences."
+                ),
             },
             {"role": "user", "content": prompt},
         ]
 
         result = await self.generate(messages, temperature=0.9, max_tokens=200)
-
-        # 如果只需要一个句子，返回第一行
         if count == 1:
-            lines = [l.strip() for l in result.strip().split("\n") if l.strip()]
+            lines = [line.strip() for line in result.splitlines() if line.strip()]
             return lines[0] if lines else result.strip()
-
         return result.strip()
 
     async def generate_scenario_response(
@@ -271,17 +150,39 @@ class ConversationEngine:
         conversation_history: list[dict],
         scenario_prompt: str,
     ) -> str:
-        """
-        在场景模式中生成角色回复
-
-        Args:
-            user_text: 用户输入
-            conversation_history: 场景对话历史
-            scenario_prompt: 已格式化的场景系统 prompt
-
-        Returns:
-            角色回复
-        """
         return await self.generate_response(
             user_text, conversation_history, scenario_prompt
         )
+
+    async def _resolve_provider_id(self) -> str:
+        if self.provider_id:
+            return self.provider_id
+
+        if self.umo and hasattr(self.context, "get_current_chat_provider_id"):
+            try:
+                return await self.context.get_current_chat_provider_id(umo=self.umo)
+            except TypeError:
+                return await self.context.get_current_chat_provider_id(self.umo)
+            except Exception as exc:
+                logger.debug(f"[Conversation] 获取当前会话 provider 失败: {exc}")
+
+        return ""
+
+    @staticmethod
+    def _messages_to_prompt(messages: list[dict]) -> tuple[str, str]:
+        system_parts: list[str] = []
+        prompt_parts: list[str] = []
+
+        for message in messages:
+            role = message.get("role", "user")
+            content = str(message.get("content", "")).strip()
+            if not content:
+                continue
+            if role == "system":
+                system_parts.append(content)
+            elif role == "assistant":
+                prompt_parts.append(f"Assistant: {content}")
+            else:
+                prompt_parts.append(f"User: {content}")
+
+        return "\n\n".join(prompt_parts), "\n\n".join(system_parts)

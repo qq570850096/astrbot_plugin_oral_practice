@@ -1,4 +1,34 @@
 {
+  "llm_provider_id": {
+    "_special": "select_provider",
+    "title": "对话/反馈使用的 AstrBot 大语言模型提供商",
+    "description": "留空则使用当前会话默认 LLM 提供商",
+    "default": ""
+  },
+  "use_astrbot_stt": {
+    "type": "bool",
+    "title": "使用 AstrBot 语音识别提供商",
+    "description": "开启后复用 AstrBot WebUI 中已配置的 STT；关闭后使用下方 MiMo 直连配置",
+    "default": true
+  },
+  "stt_provider_id": {
+    "_special": "select_provider_stt",
+    "title": "AstrBot 语音识别（STT）提供商",
+    "description": "留空则使用 AstrBot 默认 STT 提供商",
+    "default": ""
+  },
+  "use_astrbot_tts": {
+    "type": "bool",
+    "title": "使用 AstrBot 语音合成提供商",
+    "description": "开启后复用 AstrBot WebUI 中已配置的 TTS；关闭后使用下方 MiMo 直连配置",
+    "default": true
+  },
+  "tts_provider_id": {
+    "_special": "select_provider_tts",
+    "title": "AstrBot 语音合成（TTS）提供商",
+    "description": "留空则使用 AstrBot 默认 TTS 提供商",
+    "default": ""
+  },
   "azure_speech_key": {
     "type": "string",
     "title": "Azure Speech API Key",
@@ -12,60 +42,41 @@
     "description": "Azure 语音服务的区域（如 eastasia, southeastasia, westus 等）",
     "default": "eastasia"
   },
-  "mimo_api_key": {
-    "type": "string",
-    "title": "MiMo API Key",
-    "description": "MiMo 语音识别/合成服务的 API 密钥",
-    "default": "",
-    "obvious_hint": true
-  },
-  "mimo_api_base": {
-    "type": "string",
-    "title": "MiMo API Base URL",
-    "description": "MiMo API 的基础 URL 地址",
-    "default": "https://api.xiaomimimo.com/v1"
-  },
-  "mimo_stt_model": {
-    "type": "string",
-    "title": "MiMo STT Model",
-    "description": "MiMo 语音识别（STT）使用的模型名称",
-    "default": "mimo-v2-omni"
-  },
-  "mimo_tts_model": {
-    "type": "string",
-    "title": "MiMo TTS Model",
-    "description": "MiMo 语音合成（TTS）使用的模型名称",
-    "default": "mimo-v2-tts"
-  },
-  "gpt_api_key": {
-    "type": "string",
-    "title": "GPT API Key",
-    "description": "GPT 5.5 大语言模型的 API 密钥，用于对话和反馈生成",
-    "default": "",
-    "obvious_hint": true
-  },
-  "gpt_api_base": {
-    "type": "string",
-    "title": "GPT API Base URL",
-    "description": "GPT API 的基础 URL 地址",
-    "default": "https://api.openai.com/v1"
-  },
-  "gpt_model": {
-    "type": "string",
-    "title": "GPT Model",
-    "description": "GPT 对话使用的模型名称",
-    "default": "gpt-5.5"
-  },
   "default_language": {
     "type": "string",
     "title": "Default Language",
     "description": "默认语言代码（BCP-47 格式，如 en-US, en-GB）",
     "default": "en-US"
   },
+  "mimo_api_key": {
+    "type": "string",
+    "title": "MiMo API Key（直连 fallback）",
+    "description": "仅当关闭 AstrBot STT/TTS 提供商时使用",
+    "default": "",
+    "obvious_hint": true
+  },
+  "mimo_api_base": {
+    "type": "string",
+    "title": "MiMo API Base URL（直连 fallback）",
+    "description": "仅当关闭 AstrBot STT/TTS 提供商时使用",
+    "default": "https://api.xiaomimimo.com/v1"
+  },
+  "mimo_stt_model": {
+    "type": "string",
+    "title": "MiMo STT Model（直连 fallback）",
+    "description": "仅当关闭 AstrBot STT 提供商时使用",
+    "default": "mimo-v2-omni"
+  },
+  "mimo_tts_model": {
+    "type": "string",
+    "title": "MiMo TTS Model（直连 fallback）",
+    "description": "仅当关闭 AstrBot TTS 提供商时使用",
+    "default": "mimo-v2-tts"
+  },
   "tts_emotion": {
     "type": "string",
-    "title": "TTS Default Emotion",
-    "description": "TTS 语音合成的默认情感风格",
+    "title": "TTS Default Emotion（MiMo 直连 fallback）",
+    "description": "仅当关闭 AstrBot TTS 提供商时使用",
     "default": "温柔"
   },
   "max_session_minutes": {
