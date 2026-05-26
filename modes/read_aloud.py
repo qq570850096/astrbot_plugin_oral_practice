@@ -199,7 +199,7 @@ class ReadAloudMode(BaseMode):
             )
 
         response_text = "\n".join(text_parts)
-        audio = await self._try_tts(self._build_spoken_feedback(feedback_text))
+        audio = await self._try_tts(self._build_spoken_feedback(response_text))
         return response_text, audio
 
     async def handle_text(self, text: str) -> tuple[str, Optional[bytes]]:
@@ -362,24 +362,29 @@ class ReadAloudMode(BaseMode):
 
     @staticmethod
     def _build_spoken_feedback(feedback_text: str) -> str:
-        """Build a concise spoken version from the LLM coaching feedback."""
+        """Build spoken feedback from the same text shown to the user."""
         text = feedback_text or ""
+        text = re.sub(
+            r"💪\s*要再试一次吗？发送语音重新朗读~\s*或输入「下一个」跳到新句子",
+            "",
+            text,
+            flags=re.S,
+        )
+        text = re.sub(
+            r"✨\s*太棒了！发送语音继续下一个句子~.*$",
+            "",
+            text,
+            flags=re.S,
+        )
+        text = re.sub(r"📝\s*下一个句子：.*$", "", text, flags=re.S)
         text = re.sub(r"[*_`#>\[\]]", "", text)
         text = re.sub(r"[📊🎯📌💡🌟✨💪👍👏⭐✅❌⚠️🔥]", "", text)
         text = re.sub(r"█+░*", "", text)
+        text = re.sub(r"/[^/\s]+(?:\s+[^/\s]+){0,3}/", "", text)
+        text = text.replace("/", " ")
+        text = text.replace("|", "，")
+        text = re.sub(r"\bprosody\s*=\s*0\b", "韵律评分这次没有有效分数", text, flags=re.I)
         text = re.sub(r"\s+", " ", text).strip()
-
-        sentences = re.split(r"(?<=[。！？.!?])\s+", text)
-        selected: list[str] = []
-        for sentence in sentences:
-            sentence = sentence.strip(" -•")
-            if not sentence:
-                continue
-            selected.append(sentence)
-            if len(" ".join(selected)) >= 180 or len(selected) >= 3:
-                break
-
-        spoken = " ".join(selected).strip()
-        if not spoken:
+        if not text:
             return "这次反馈已经生成，请重点看文字里的发音问题和三十秒练习任务。"
-        return spoken[:260]
+        return text[:900]

@@ -240,14 +240,16 @@ class OralPracticePlugin(Star):
             self.session_manager.start_mode(user_id, SessionState.FREE_TALK)
             mode = self._create_mode(FreeTalkMode, session)
             text, audio = await mode.start()
-            yield self._stop(self._build_response(event, text, audio))
+            for result in self._build_response_results(event, text, audio):
+                yield result
 
         # ---------- read: 朗读练习 ----------
         elif subcmd == "read":
             self.session_manager.start_mode(user_id, SessionState.READ_ALOUD)
             mode = self._create_mode(ReadAloudMode, session)
             text, audio = await mode.start()
-            yield self._stop(self._build_response(event, text, audio))
+            for result in self._build_response_results(event, text, audio):
+                yield result
 
         # ---------- scene: 场景练习 ----------
         elif subcmd in ("scene", "scenario"):
@@ -258,14 +260,16 @@ class OralPracticePlugin(Star):
             )
             mode = self._create_mode(ScenarioMode, session)
             text, audio = await mode.start()
-            yield self._stop(self._build_response(event, text, audio))
+            for result in self._build_response_results(event, text, audio):
+                yield result
 
         # ---------- drill: 单词操练 ----------
         elif subcmd == "drill":
             self.session_manager.start_mode(user_id, SessionState.WORD_DRILL)
             mode = self._create_mode(WordDrillMode, session)
             text, audio = await mode.start()
-            yield self._stop(self._build_response(event, text, audio))
+            for result in self._build_response_results(event, text, audio):
+                yield result
 
         # ---------- level: 设置难度 ----------
         elif subcmd == "level":
@@ -394,7 +398,8 @@ class OralPracticePlugin(Star):
             audio = None
 
         if text:
-            yield self._stop(self._build_response(event, text, audio))
+            for result in self._build_response_results(event, text, audio):
+                yield result
 
     # ==================================================================
     # 辅助方法
@@ -597,25 +602,38 @@ class OralPracticePlugin(Star):
             if hasattr(service, "umo"):
                 service.umo = umo
 
-    def _build_response(self, event, text: str, audio: Optional[bytes] = None):
-        """构建包含文本和可选语音的响应"""
-        chain = [Comp.Plain(text)]
+    def _build_response_results(self, event, text: str, audio: Optional[bytes] = None):
+        """Build ordered responses: text first, then optional voice."""
+        audio_result = self._build_audio_response(event, text, audio)
 
-        if audio and isinstance(audio, bytes):
-            try:
-                audio_filename = f"resp_{hash(text) & 0xFFFFFFFF}_{int(time.time())}.wav"
-                audio_path = os.path.join(self._temp_dir, audio_filename)
-                with open(audio_path, "wb") as f:
-                    f.write(audio)
-                if hasattr(Comp.Record, "fromFileSystem"):
-                    chain.append(Comp.Record.fromFileSystem(audio_path))
-                else:
-                    chain.append(Comp.Record(file=audio_path))
-                logger.info("[OralPractice] 添加 TTS 语音回复: %s", audio_path)
-            except Exception as e:
-                logger.warning(f"保存响应音频失败: {e}")
+        if audio_result:
+            if text:
+                yield event.plain_result(text)
+            yield self._stop(audio_result)
+            return
 
-        return event.chain_result(chain)
+        if text:
+            yield self._stop(event.plain_result(text))
+
+    def _build_audio_response(self, event, text: str, audio: Optional[bytes] = None):
+        """Build a record-only response so platforms keep text/audio ordering."""
+        if not audio or not isinstance(audio, bytes):
+            return None
+
+        try:
+            audio_filename = f"resp_{hash(text) & 0xFFFFFFFF}_{int(time.time())}.wav"
+            audio_path = os.path.join(self._temp_dir, audio_filename)
+            with open(audio_path, "wb") as f:
+                f.write(audio)
+            if hasattr(Comp.Record, "fromFileSystem"):
+                record = Comp.Record.fromFileSystem(audio_path)
+            else:
+                record = Comp.Record(file=audio_path)
+            logger.info("[OralPractice] 添加 TTS 语音回复: %s", audio_path)
+            return event.chain_result([record])
+        except Exception as e:
+            logger.warning(f"保存响应音频失败: {e}")
+            return None
 
     @staticmethod
     def _main_menu() -> str:
