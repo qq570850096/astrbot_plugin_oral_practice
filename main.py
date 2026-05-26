@@ -291,7 +291,7 @@ class OralPracticePlugin(Star):
                 f"❓ 未知命令: {subcmd}\n\n" + self._main_menu()
             ))
 
-    @filter.regex(r"^(?!/oral).*")
+    @filter.event_message_type(filter.EventMessageType.ALL)
     async def handle_session_message(self, event: AstrMessageEvent):
         """
         处理活跃会话中的非命令消息（语音和文本）
@@ -317,7 +317,7 @@ class OralPracticePlugin(Star):
         if not mode:
             return
 
-        # 检查是否包含语音消息
+        # 检查是否包含语音消息。QQ/微信语音通常是命令后的独立消息。
         audio_path = await self._extract_audio(event)
 
         try:
@@ -433,25 +433,70 @@ class OralPracticePlugin(Star):
                 messages = []
 
             for comp in messages:
-                is_record = isinstance(comp, Comp.Record) or (
-                    hasattr(comp, "type") and comp.type == "record"
-                )
-                if not is_record:
+                if not self._is_record_component(comp):
                     continue
 
-                if hasattr(comp, "convert_to_file_path"):
-                    path = comp.convert_to_file_path()
-                    if inspect.isawaitable(path):
-                        path = await path
-                    if path:
-                        return str(path)
+                logger.info(
+                    "[OralPractice] 检测到语音组件: %s",
+                    self._component_debug_info(comp),
+                )
 
-                path = getattr(comp, "file", None) or getattr(comp, "url", None)
+                path = await self._record_to_file_path(comp)
                 if path:
+                    logger.info("[OralPractice] 语音文件路径: %s", path)
                     return str(path)
+
+                logger.warning(
+                    "[OralPractice] 语音组件未能转换为文件路径: %s",
+                    self._component_debug_info(comp),
+                )
         except Exception as e:
-            logger.debug(f"提取音频失败: {e}")
+            logger.debug(f"提取音频失败: {e}", exc_info=True)
         return None
+
+    @staticmethod
+    def _is_record_component(comp) -> bool:
+        """兼容 AstrBot 不同适配器的 Record 组件表示。"""
+        if isinstance(comp, Comp.Record):
+            return True
+
+        comp_type = getattr(comp, "type", None)
+        type_name = getattr(comp_type, "name", "")
+        type_value = getattr(comp_type, "value", comp_type)
+        type_texts = {
+            str(type_name).lower(),
+            str(type_value).lower(),
+            str(comp_type).lower(),
+            comp.__class__.__name__.lower(),
+        }
+        return bool(type_texts & {"record", "componenttype.record"})
+
+    async def _record_to_file_path(self, comp) -> Optional[str]:
+        if hasattr(comp, "convert_to_file_path"):
+            path = comp.convert_to_file_path()
+            if inspect.isawaitable(path):
+                path = await path
+            if path:
+                return str(path)
+
+        for attr in ("file", "path", "url"):
+            path = getattr(comp, attr, None)
+            if path:
+                return str(path)
+
+        return None
+
+    @staticmethod
+    def _component_debug_info(comp) -> str:
+        fields = {
+            "class": comp.__class__.__name__,
+            "type": str(getattr(comp, "type", "")),
+            "file": bool(getattr(comp, "file", None)),
+            "path": bool(getattr(comp, "path", None)),
+            "url": bool(getattr(comp, "url", None)),
+            "convert_to_file_path": hasattr(comp, "convert_to_file_path"),
+        }
+        return ", ".join(f"{key}={value}" for key, value in fields.items())
 
     def _bind_event_context(self, event: AstrMessageEvent) -> None:
         umo = event.unified_msg_origin
