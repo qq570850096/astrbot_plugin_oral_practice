@@ -42,6 +42,9 @@ class ConversationEngine:
             raise RuntimeError("[Conversation] AstrBot Context 不可用")
 
         provider_id = await self._resolve_provider_id()
+        if not provider_id:
+            raise RuntimeError("[Conversation] AstrBot LLM 提供商未配置")
+
         prompt, system_prompt = self._messages_to_prompt(messages)
 
         try:
@@ -165,6 +168,21 @@ class ConversationEngine:
                 return await self.context.get_current_chat_provider_id(self.umo)
             except Exception as exc:
                 logger.debug(f"[Conversation] 获取当前会话 provider 失败: {exc}")
+
+        if hasattr(self.context, "get_using_provider"):
+            try:
+                provider = self.context.get_using_provider(self.umo or None)
+            except TypeError:
+                provider = self.context.get_using_provider()
+            except Exception as exc:
+                logger.debug(f"[Conversation] 获取默认 provider 失败: {exc}")
+                provider = None
+
+            if provider and hasattr(provider, "meta"):
+                try:
+                    return provider.meta().id
+                except Exception as exc:
+                    logger.debug(f"[Conversation] 读取 provider id 失败: {exc}")
 
         return ""
 

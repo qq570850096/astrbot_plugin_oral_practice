@@ -5,6 +5,7 @@ Adapters for AstrBot configured STT/TTS providers.
 
 from __future__ import annotations
 
+import inspect
 import os
 import tempfile
 import time
@@ -23,13 +24,14 @@ class AstrBotSTTService:
     def __init__(self, context=None, provider_id: str = ""):
         self.context = context
         self.provider_id = (provider_id or "").strip()
+        self.umo = ""
 
     @property
     def available(self) -> bool:
         return self.context is not None
 
-    async def transcribe(self, audio_path: str) -> TranscribeResult:
-        provider = await self._get_provider()
+    async def transcribe(self, audio_path: str, umo: str = "") -> TranscribeResult:
+        provider = await self._get_provider(umo)
         if not provider:
             raise RuntimeError("[STT] AstrBot STT 提供商未配置")
 
@@ -48,18 +50,19 @@ class AstrBotSTTService:
             duration=0.0,
         )
 
-    async def _get_provider(self):
-        if self.provider_id and hasattr(self.context, "get_using_stt_provider"):
-            try:
-                return self.context.get_using_stt_provider(self.provider_id)
-            except TypeError:
-                return await self.context.get_using_stt_provider(self.provider_id)
+    async def _get_provider(self, umo: str = ""):
+        if self.provider_id and hasattr(self.context, "get_provider_by_id"):
+            provider = self.context.get_provider_by_id(self.provider_id)
+            return await provider if inspect.isawaitable(provider) else provider
 
         if hasattr(self.context, "get_using_stt_provider"):
+            umo = umo or self.umo
             try:
-                return self.context.get_using_stt_provider()
+                provider = self.context.get_using_stt_provider(umo=umo or None)
+                return await provider if inspect.isawaitable(provider) else provider
             except TypeError:
-                return await self.context.get_using_stt_provider()
+                provider = self.context.get_using_stt_provider(umo or None)
+                return await provider if inspect.isawaitable(provider) else provider
 
         return None
 
@@ -82,6 +85,7 @@ class AstrBotTTSService:
     ):
         self.context = context
         self.provider_id = (provider_id or "").strip()
+        self.umo = ""
         self.temp_dir = Path(temp_dir or tempfile.gettempdir())
         self.temp_dir.mkdir(parents=True, exist_ok=True)
 
@@ -94,11 +98,12 @@ class AstrBotTTSService:
         text: str,
         emotion: Optional[str] = None,
         output_path: Optional[str] = None,
+        umo: str = "",
     ) -> SynthesisResult:
         if not text or not text.strip():
             raise ValueError("[TTS] Cannot synthesize empty text.")
 
-        provider = await self._get_provider()
+        provider = await self._get_provider(umo)
         if not provider:
             raise RuntimeError("[TTS] AstrBot TTS 提供商未配置")
 
@@ -117,18 +122,19 @@ class AstrBotTTSService:
     async def synthesize_feedback(self, text: str) -> SynthesisResult:
         return await self.synthesize(text, emotion="encouraging")
 
-    async def _get_provider(self):
-        if self.provider_id and hasattr(self.context, "get_using_tts_provider"):
-            try:
-                return self.context.get_using_tts_provider(self.provider_id)
-            except TypeError:
-                return await self.context.get_using_tts_provider(self.provider_id)
+    async def _get_provider(self, umo: str = ""):
+        if self.provider_id and hasattr(self.context, "get_provider_by_id"):
+            provider = self.context.get_provider_by_id(self.provider_id)
+            return await provider if inspect.isawaitable(provider) else provider
 
         if hasattr(self.context, "get_using_tts_provider"):
+            umo = umo or self.umo
             try:
-                return self.context.get_using_tts_provider()
+                provider = self.context.get_using_tts_provider(umo=umo or None)
+                return await provider if inspect.isawaitable(provider) else provider
             except TypeError:
-                return await self.context.get_using_tts_provider()
+                provider = self.context.get_using_tts_provider(umo or None)
+                return await provider if inspect.isawaitable(provider) else provider
 
         return None
 

@@ -9,7 +9,7 @@ English Oral Practice Plugin for AstrBot
 from __future__ import annotations
 
 import os
-import asyncio
+import inspect
 import time
 from typing import Optional
 
@@ -171,16 +171,11 @@ class OralPracticePlugin(Star):
     @filter.command("oral")
     async def cmd_oral(self, event: AstrMessageEvent):
         """口语练习主命令 /oral [talk|read|scene|drill|level|report|stop]"""
-        # 解析子命令
-        # AstrBot 的 @filter.command("oral") 已经移除了 "oral" 前缀
-        # event.message_str 只包含子命令及其参数，例如 "talk" 或 "scene restaurant"
-        raw = event.message_str.strip()
-        parts = raw.split()
-        subcmd = parts[0].lower() if parts else ""
-        args = parts[1:] if len(parts) > 1 else []
+        subcmd, args = self._parse_oral_args(event)
 
-        user_id = event.unified_msg_origin
+        user_id = self._user_key(event)
         user_name = event.get_sender_name()
+        self._bind_event_context(event)
 
         # 确保数据库已初始化
         await self._ensure_db_initialized()
@@ -196,7 +191,7 @@ class OralPracticePlugin(Star):
 
         if not subcmd:
             # 显示主菜单
-            yield event.plain_result(self._main_menu())
+            yield self._stop(event.plain_result(self._main_menu()))
             return
 
         # ---------- talk: 自由对话 ----------
@@ -204,14 +199,14 @@ class OralPracticePlugin(Star):
             self.session_manager.start_mode(user_id, SessionState.FREE_TALK)
             mode = self._create_mode(FreeTalkMode, session)
             text, audio = await mode.start()
-            yield self._build_response(event, text, audio)
+            yield self._stop(self._build_response(event, text, audio))
 
         # ---------- read: 朗读练习 ----------
         elif subcmd == "read":
             self.session_manager.start_mode(user_id, SessionState.READ_ALOUD)
             mode = self._create_mode(ReadAloudMode, session)
             text, audio = await mode.start()
-            yield self._build_response(event, text, audio)
+            yield self._stop(self._build_response(event, text, audio))
 
         # ---------- scene: 场景练习 ----------
         elif subcmd in ("scene", "scenario"):
@@ -222,14 +217,14 @@ class OralPracticePlugin(Star):
             )
             mode = self._create_mode(ScenarioMode, session)
             text, audio = await mode.start()
-            yield self._build_response(event, text, audio)
+            yield self._stop(self._build_response(event, text, audio))
 
         # ---------- drill: 单词操练 ----------
         elif subcmd == "drill":
             self.session_manager.start_mode(user_id, SessionState.WORD_DRILL)
             mode = self._create_mode(WordDrillMode, session)
             text, audio = await mode.start()
-            yield self._build_response(event, text, audio)
+            yield self._stop(self._build_response(event, text, audio))
 
         # ---------- level: 设置难度 ----------
         elif subcmd == "level":
@@ -240,16 +235,16 @@ class OralPracticePlugin(Star):
                     await self.progress.update_user_level(user_id, level)
                 except Exception:
                     pass
-                yield event.plain_result(
+                yield self._stop(event.plain_result(
                     f"✅ 难度等级已设置为 CEFR {level}\n\n"
                     "此设置将在下次开始练习时生效~"
-                )
+                ))
             else:
-                yield event.plain_result(
+                yield self._stop(event.plain_result(
                     "❌ 无效等级\n\n"
                     "请选择: A1, A2, B1, B2\n"
                     "例如: /oral level B1"
-                )
+                ))
 
         # ---------- report: 练习报告 ----------
         elif subcmd == "report":
@@ -257,7 +252,7 @@ class OralPracticePlugin(Star):
                 report = await self.progress.generate_report(user_id)
             except Exception as e:
                 report = f"📊 获取报告失败: {e}"
-            yield event.plain_result(report)
+            yield self._stop(event.plain_result(report))
 
         # ---------- stop: 结束练习 ----------
         elif subcmd == "stop":
@@ -279,22 +274,22 @@ class OralPracticePlugin(Star):
                     pass
 
                 self.session_manager.end_mode(user_id)
-                yield event.plain_result(
+                yield self._stop(event.plain_result(
                     "✅ 练习已结束，辛苦了！👏\n\n"
                     "📊 发送 /oral report 查看你的练习报告\n"
                     "🎙️ 发送 /oral 查看主菜单"
-                )
+                ))
             else:
-                yield event.plain_result("当前没有进行中的练习~")
+                yield self._stop(event.plain_result("当前没有进行中的练习~"))
 
         # ---------- help: 帮助 ----------
         elif subcmd == "help":
-            yield event.plain_result(self._main_menu())
+            yield self._stop(event.plain_result(self._main_menu()))
 
         else:
-            yield event.plain_result(
+            yield self._stop(event.plain_result(
                 f"❓ 未知命令: {subcmd}\n\n" + self._main_menu()
-            )
+            ))
 
     @filter.regex(r"^(?!/oral).*")
     async def handle_session_message(self, event: AstrMessageEvent):
@@ -303,7 +298,11 @@ class OralPracticePlugin(Star):
 
         仅当用户处于活跃练习会话时才处理
         """
-        user_id = event.unified_msg_origin
+        if self._looks_like_command(event.message_str):
+            return
+
+        user_id = self._user_key(event)
+        self._bind_event_context(event)
 
         # 检查是否有活跃会话
         if not self.session_manager.is_active(user_id):
@@ -319,7 +318,7 @@ class OralPracticePlugin(Star):
             return
 
         # 检查是否包含语音消息
-        audio_path = self._extract_audio(event)
+        audio_path = await self._extract_audio(event)
 
         try:
             if audio_path:
@@ -345,7 +344,7 @@ class OralPracticePlugin(Star):
             audio = None
 
         if text:
-            yield self._build_response(event, text, audio)
+            yield self._stop(self._build_response(event, text, audio))
 
     # ==================================================================
     # 辅助方法
@@ -364,21 +363,102 @@ class OralPracticePlugin(Star):
             return self._create_mode(mode_class, session)
         return None
 
-    def _extract_audio(self, event: AstrMessageEvent) -> Optional[str]:
+    def _parse_oral_args(self, event: AstrMessageEvent) -> tuple[str, list[str]]:
+        """Parse /oral args from AstrBot parsed params or raw message text."""
+        parts: list[str] = []
+        extra = getattr(event, "extra", None)
+        parsed_params = None
+        if isinstance(extra, dict):
+            parsed_params = extra.get("parsed_params")
+
+        if parsed_params:
+            if isinstance(parsed_params, str):
+                parts = parsed_params.split()
+            else:
+                parts = [str(part) for part in parsed_params if str(part).strip()]
+        else:
+            raw = (event.message_str or "").strip()
+            parts = raw.split()
+
+        if parts and parts[0].lstrip("/").lower() == "oral":
+            parts = parts[1:]
+
+        subcmd = parts[0].lower() if parts else ""
+        args = parts[1:] if len(parts) > 1 else []
+        return subcmd, args
+
+    def _user_key(self, event: AstrMessageEvent) -> str:
+        """Build a per-sender session key so group members do not share state."""
+        sender_id = ""
+        try:
+            sender_id = event.get_sender_id() or ""
+        except Exception:
+            pass
+
+        if not sender_id:
+            sender = getattr(getattr(event, "message_obj", None), "sender", None)
+            raw_sender_id = getattr(sender, "user_id", "")
+            sender_id = str(raw_sender_id) if raw_sender_id else ""
+
+        try:
+            session_id = event.unified_msg_origin or event.get_session_id()
+        except Exception:
+            session_id = event.unified_msg_origin
+
+        session_id = str(session_id or "")
+        return f"{session_id}:{sender_id}" if sender_id else session_id
+
+    @staticmethod
+    def _looks_like_command(message: str) -> bool:
+        raw = (message or "").strip()
+        if not raw:
+            return False
+        lowered = raw.lower()
+        return lowered.startswith("/") or lowered == "oral" or lowered.startswith("oral ")
+
+    @staticmethod
+    def _stop(result):
+        if hasattr(result, "stop_event"):
+            return result.stop_event()
+        return result
+
+    async def _extract_audio(self, event: AstrMessageEvent) -> Optional[str]:
         """从消息中提取语音文件路径"""
         try:
-            if hasattr(event, "message_obj") and event.message_obj:
-                for comp in event.message_obj.message:
-                    if isinstance(comp, Comp.Record):
-                        return comp.file or comp.url
-                    # 某些平台可能用其他方式传递语音
-                    if hasattr(comp, "type") and comp.type == "record":
-                        return getattr(comp, "file", None) or getattr(
-                            comp, "url", None
-                        )
+            if hasattr(event, "get_messages"):
+                messages = event.get_messages()
+            elif hasattr(event, "message_obj") and event.message_obj:
+                messages = event.message_obj.message
+            else:
+                messages = []
+
+            for comp in messages:
+                is_record = isinstance(comp, Comp.Record) or (
+                    hasattr(comp, "type") and comp.type == "record"
+                )
+                if not is_record:
+                    continue
+
+                if hasattr(comp, "convert_to_file_path"):
+                    path = comp.convert_to_file_path()
+                    if inspect.isawaitable(path):
+                        path = await path
+                    if path:
+                        return str(path)
+
+                path = getattr(comp, "file", None) or getattr(comp, "url", None)
+                if path:
+                    return str(path)
         except Exception as e:
             logger.debug(f"提取音频失败: {e}")
         return None
+
+    def _bind_event_context(self, event: AstrMessageEvent) -> None:
+        umo = event.unified_msg_origin
+        self.conversation.umo = umo
+        for service in (self.stt, self.tts):
+            if hasattr(service, "umo"):
+                service.umo = umo
 
     def _build_response(self, event, text: str, audio: Optional[bytes] = None):
         """构建包含文本和可选语音的响应"""
