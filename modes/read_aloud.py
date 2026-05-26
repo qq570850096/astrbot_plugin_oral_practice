@@ -197,7 +197,15 @@ class ReadAloudMode(BaseMode):
                 "或输入「下一个」跳到新句子"
             )
 
-        return "\n".join(text_parts), None
+        response_text = "\n".join(text_parts)
+        audio = await self._try_tts(
+            self._build_spoken_feedback(
+                assessment.overall_score,
+                assessment.accuracy_score,
+                assessment.fluency_score,
+            )
+        )
+        return response_text, audio
 
     async def handle_text(self, text: str) -> tuple[str, Optional[bytes]]:
         """处理文本命令"""
@@ -356,3 +364,25 @@ class ReadAloudMode(BaseMode):
         except Exception as e:
             logger.warning(f"{self._log_prefix()} TTS 失败: {e}")
             return None
+
+    @staticmethod
+    def _build_spoken_feedback(
+        overall_score: float,
+        accuracy_score: float,
+        fluency_score: float,
+    ) -> str:
+        if overall_score >= 85:
+            opening = "Great job. Your pronunciation was clear and fluent."
+            next_step = "You can try the next sentence, or repeat this one for extra practice."
+        elif overall_score >= 70:
+            opening = "Good work. Your pronunciation is understandable."
+            next_step = "Try reading it once more, a little slower and more clearly."
+        else:
+            opening = "Nice effort. Let's practice this sentence again."
+            next_step = "Focus on each word, and keep a steady rhythm."
+
+        return (
+            f"{opening} Your overall score is {overall_score:.0f}. "
+            f"Accuracy is {accuracy_score:.0f}, and fluency is {fluency_score:.0f}. "
+            f"{next_step}"
+        )
