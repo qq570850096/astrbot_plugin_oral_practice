@@ -22,6 +22,7 @@ import astrbot.api.message_components as Comp
 from .core.stt_service import STTService
 from .core.tts_service import TTSService
 from .core.astrbot_services import AstrBotSTTService, AstrBotTTSService
+from .core.azure_stt_service import AzureSTTService, UnavailableSTTService
 from .core.pronunciation import PronunciationAssessor
 from .core.conversation import ConversationEngine
 from .core.feedback import FeedbackGenerator
@@ -68,13 +69,34 @@ class OralPracticePlugin(Star):
     def _init_services(self):
         """根据配置初始化所有服务实例"""
 
-        # --- STT: AstrBot provider by default, MiMo direct API as fallback ---
+        azure_key = self.config.get("azure_speech_key", "")
+        azure_region = self.config.get("azure_speech_region", "eastus")
+        default_language = self.config.get("default_language", "en-US")
+
+        # --- STT: Azure by default, AstrBot/MiMo as optional fallback ---
+        stt_backend = self.config.get("stt_backend", "azure")
         stt_provider_id = self.config.get("stt_provider_id", "")
-        use_astrbot_stt = self.config.get("use_astrbot_stt", True)
+        use_astrbot_stt = self.config.get("use_astrbot_stt", False)
         mimo_key = self.config.get("mimo_api_key", "")
         mimo_base = self.config.get("mimo_api_base", "https://api.xiaomimimo.com/v1")
 
-        if use_astrbot_stt:
+        if stt_backend == "azure":
+            try:
+                self.stt = AzureSTTService(
+                    subscription_key=azure_key,
+                    region=azure_region,
+                    language=default_language,
+                )
+                logger.info("✅ Azure STT 已配置")
+            except ImportError as e:
+                logger.warning(f"⚠️ Azure SDK 未安装，STT 不可用: {e}")
+                self.stt = UnavailableSTTService(str(e))
+            except Exception as e:
+                logger.warning(f"⚠️ Azure STT 初始化失败，STT 不可用: {e}")
+                self.stt = UnavailableSTTService(
+                    "Azure STT 未配置，请填写 azure_speech_key 和 azure_speech_region。"
+                )
+        elif stt_backend == "astrbot" or use_astrbot_stt:
             self.stt = AstrBotSTTService(
                 context=self.context,
                 provider_id=stt_provider_id,
@@ -105,8 +127,6 @@ class OralPracticePlugin(Star):
             )
 
         # --- Pronunciation: Azure ---
-        azure_key = self.config.get("azure_speech_key", "")
-        azure_region = self.config.get("azure_speech_region", "eastasia")
         if azure_key:
             try:
                 self.pronunciation = PronunciationAssessor(azure_key, azure_region)

@@ -177,33 +177,26 @@ class WordDrillMode(BaseMode):
 
         logger.info(f"{self._log_prefix()} 评估单词: \"{current_word}\"")
 
-        # 发音评估
-        if self.pronunciation_assessor:
-            try:
-                assessment = await self.pronunciation_assessor.assess(
-                    audio_path=audio_path,
-                    reference_text=current_word,
-                    language="en-US",
-                )
-            except Exception as e:
-                logger.error(f"{self._log_prefix()} 评估失败: {e}")
-                return (
-                    "😅 评估出了点问题，请再试一次~\n"
-                    f"当前单词: \"{current_word}\"",
-                    None,
-                )
-        else:
-            # 无评估服务，仅做 STT
-            try:
-                result = await self.stt_service.transcribe(audio_path)
-                return (
-                    f"📝 识别结果: \"{result.text}\"\n"
-                    f"📖 目标单词: \"{current_word}\"\n\n"
-                    "⚠️ 发音评估服务未配置，仅显示识别结果。",
-                    None,
-                )
-            except Exception:
-                return "😅 语音识别失败，请再试一次~", None
+        if not self.pronunciation_assessor:
+            return (
+                "❌ Azure 发音评估未配置，单词操练无法继续。\n\n"
+                "请在插件配置中填写 azure_speech_key 和 azure_speech_region。"
+            ), None
+
+        try:
+            assessment = await self.pronunciation_assessor.assess(
+                audio_path=audio_path,
+                reference_text=current_word,
+                language="en-US",
+            )
+        except Exception as e:
+            logger.error(f"{self._log_prefix()} 评估失败: {e}", exc_info=True)
+            return (
+                "❌ Azure 发音评估失败，未进行 STT 降级。\n"
+                f"当前单词: \"{current_word}\"\n\n"
+                f"错误: {str(e)[:200]}",
+                None,
+            )
 
         score = assessment.accuracy_score
         self.session.mode_data["total_count"] = (

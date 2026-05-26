@@ -6,11 +6,17 @@
     "description": "留空则使用当前会话默认 LLM 提供商",
     "default": ""
   },
+  "stt_backend": {
+    "type": "string",
+    "title": "STT 语音识别后端",
+    "description": "azure=使用 Azure Speech-to-Text；astrbot=使用 AstrBot STT；mimo=使用 MiMo 直连",
+    "default": "azure"
+  },
   "use_astrbot_stt": {
     "type": "bool",
-    "title": "使用 AstrBot 语音识别提供商",
-    "description": "开启后复用 AstrBot WebUI 中已配置的 STT；关闭后使用下方 MiMo 直连配置",
-    "default": true
+    "title": "兼容旧配置：使用 AstrBot 语音识别提供商",
+    "description": "建议改用 stt_backend=azure。此项仅用于兼容旧版本配置",
+    "default": false
   },
   "stt_provider_id": {
     "type": "string",
@@ -35,15 +41,15 @@
   "azure_speech_key": {
     "type": "string",
     "title": "Azure Speech API Key",
-    "description": "Azure 语音服务的 API 密钥，用于发音评估功能",
+    "description": "Azure 语音服务的 API 密钥，用于发音评估和 Azure STT",
     "default": "",
     "obvious_hint": true
   },
   "azure_speech_region": {
     "type": "string",
     "title": "Azure Speech Region",
-    "description": "Azure 语音服务的区域（如 eastasia, southeastasia, westus 等）",
-    "default": "eastasia"
+    "description": "Azure 语音服务的区域（如 eastus, eastasia, southeastasia 等）",
+    "default": "eastus"
   },
   "default_language": {
     "type": "string",

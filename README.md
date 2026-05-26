@@ -1,14 +1,14 @@
 # 🎙️ AstrBot 口语练习插件
 
-英语口语练习插件，集成 Azure 发音评估，并复用 AstrBot 已配置的 LLM/STT/TTS 提供商，提供专业级口语训练体验。
+英语口语练习插件，集成 Azure 发音评估与 Azure Speech-to-Text，并复用 AstrBot 已配置的 LLM/TTS 提供商，提供专业级口语训练体验。
 
 ## ✨ 功能特点
 
 | 模式 | 说明 | 核心技术 |
 |------|------|---------|
-| 🗣️ 自由对话 | 与 AI 伙伴 Alex 自然英语对话 | AstrBot STT + LLM + TTS |
+| 🗣️ 自由对话 | 与 AI 伙伴 Alex 自然英语对话 | Azure STT + LLM + TTS |
 | 📖 朗读练习 | 朗读句子获得发音评分 | Azure 发音评估 + LLM 反馈 |
-| 🎭 场景练习 | 5 个真实场景角色扮演 | Azure 评估 + LLM 角色扮演 |
+| 🎭 场景练习 | 5 个真实场景角色扮演 | Azure STT + Azure 评估 + LLM |
 | 🔤 单词操练 | 60 个分级单词逐词练习 | Azure 评估 + IPA 音标 |
 
 ### 其他特性
@@ -16,13 +16,13 @@
 - 🔄 **间隔重复** — 自动推荐需要复习的单词
 - 📈 **练习报告** — 可视化统计和趋势分析
 - 🎯 **CEFR 分级** — A1/A2/B1/B2 四级难度
-- 🛡️ **优雅降级** — 任何服务不可用时自动降级
+- 🛡️ **会话隔离** — 群聊中按用户隔离练习状态
 
 ## 📋 前置要求
 
 1. **AstrBot** 已安装并运行
-2. **Azure Speech Services** API Key（发音评估）
-3. AstrBot WebUI 中已配置好的 LLM/STT/TTS 提供商
+2. **Azure Speech Services** API Key（发音评估 + STT）
+3. AstrBot WebUI 中已配置好的 LLM/TTS 提供商
 4. 可选：**小米 MiMo** API Key（仅作为 STT/TTS 直连 fallback）
 
 ## 🔧 安装
@@ -48,22 +48,21 @@ pip install -r astrbot_plugin_oral_practice/requirements.txt
 1. 访问 [Azure Portal](https://portal.azure.com)
 2. 创建 **Speech Services** 资源：
    - 搜索 "Speech" → 创建 "Speech Services"
-   - **区域**：建议选择 `East Asia`（香港），延迟低
+   - **区域**：建议选择离 AstrBot 服务器近的区域，例如美国服务器可用 `eastus`
    - **定价层**：选择 `S0`（标准）
 3. 进入资源 → **Keys and Endpoint**
 4. 复制 **Key 1** 和 **Region**
 
-> 💡 **费用参考**：约 $1.32/小时（短音频约 $0.66/小时）
+> 建议关闭 AstrBot 全局 STT。朗读评估必须先拿到原始音频交给 Azure Pronunciation Assessment；如果全局 STT 在插件前把语音替换成文本，插件将无法完成发音评估。
 
 ### 2. AstrBot 模型提供商
 
 在 AstrBot WebUI 中先配置好：
 
 - 大语言模型提供商：用于自由对话、场景回复和反馈生成
-- 语音识别（STT）提供商：用于识别用户语音
 - 语音合成（TTS）提供商：用于生成示范和角色语音
 
-插件配置页中选择对应提供商即可。留空时使用 AstrBot 默认提供商。
+插件内 STT 默认使用 Azure Speech-to-Text，不依赖 AstrBot 全局 STT。
 
 ### 3. 小米 MiMo API Key（可选 fallback）
 
@@ -81,10 +80,11 @@ pip install -r astrbot_plugin_oral_practice/requirements.txt
 | 配置项 | 说明 | 示例 |
 |--------|------|------|
 | `llm_provider_id` | AstrBot 大语言模型提供商 | 留空使用默认 |
-| `stt_provider_id` | AstrBot 语音识别提供商 | 留空使用默认 |
+| `stt_backend` | STT 后端 | `azure` |
+| `stt_provider_id` | AstrBot 语音识别提供商 | 仅 `stt_backend=astrbot` 时使用 |
 | `tts_provider_id` | AstrBot 语音合成提供商 | 留空使用默认 |
 | `azure_speech_key` | Azure Speech API Key | `xxxxxxxxxxxxxxxx` |
-| `azure_speech_region` | Azure 区域 | `eastasia` |
+| `azure_speech_region` | Azure 区域 | `eastus` |
 | `mimo_api_key` | MiMo 直连 fallback API Key | 可选 |
 
 ## 📖 使用方法
@@ -131,6 +131,7 @@ astrbot_plugin_oral_practice/
 │
 ├── core/                    # 核心服务层
 │   ├── astrbot_services.py  # AstrBot STT/TTS 提供商适配
+│   ├── azure_stt_service.py # Azure Speech-to-Text
 │   ├── stt_service.py       # MiMo-V2-Omni 直连 fallback
 │   ├── tts_service.py       # MiMo-V2-TTS 直连 fallback
 │   ├── pronunciation.py     # Azure 发音评估
